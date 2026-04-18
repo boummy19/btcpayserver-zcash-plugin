@@ -1,94 +1,117 @@
-# ZCash support plugin
+# BTCPay Server – ZCash Plugin (Per-Store Configuration)
 
-This plugin extends BTCPayServer to enable users to receive payments via Zcash.
+This is a fork of the original [btcpay-zcash plugin](https://github.com/btcpay-zcash/btcpayserver-zcash-plugin), extended to support **per-store ZCash wallet configuration** in BTCPay Server multistore setups.
 
-> [!WARNING]
-> This plugin shares a single Zcash wallet across all the stores in the BTCPayServer instance. Only use this plugin if you are not sharing your instance.
+---
+
+## The Problem
+
+The original ZCash plugin works well for single-store BTCPay instances. But if you run multiple stores on one BTCPay Server instance, every store shares the same ZCash wallet. That means:
+
+- You cannot tell which store received a ZCash payment
+- Different store owners cannot use their own ZCash wallets
+- There is no isolation between stores for ZCash payments
+
+This is a real limitation for anyone hosting BTCPay Server for multiple merchants or running multiple independent stores on one server.
+
+---
+
+## What This Fork Does
+
+This branch (`feature/per-store-zcash-config`) adds the ability to configure a separate ZCash viewing key and wallet per store, rather than using one shared wallet for the entire BTCPay instance.
+
+Each store owner can:
+- Enter their own ZCash unified full viewing key (UFVK)
+- Set their own wallet birthday height
+- Receive ZCash payments directly to their own wallet
+- Operate independently from other stores on the same instance
+
+---
+
+## How It Works
+
+Instead of one global wallet configuration, the plugin reads wallet settings at the store level. Each store provides its own viewing key through the BTCPay Store Settings → ZCash page.
+
+The underlying `zcash-walletd` daemon handles payment detection using the provided viewing key, connecting to a public lightwalletd node (`zec.rocks`) — no full ZCash node required.
+
+---
 
 ## Getting Started
 
-### Installing the Plugin
+### Requirements
 
-[docs/installation.md](./docs/installation.md)
+- A running BTCPay Server instance (v2.3+)
+- Ubuntu 22.04 or later
+- Docker and Docker Compose
+- At least 50GB free disk space
+- A ZCash unified full viewing key (UFVK) from any compatible wallet (YWallet, Zingo, etc.)
 
-## Full Node
+### Installation
 
-Running a full node (with `zebra` and `lightwalletd`)
+Follow the standard BTCPay Docker setup with ZCash enabled:
 
 ```sh
-export BTCPAYGEN_EXCLUDE_FRAGMENTS="$BTCPAYGEN_EXCLUDE_FRAGMENTS;zcash"
-export BTCPAYGEN_ADDITIONAL_FRAGMENTS="$BTCPAYGEN_ADDITIONAL_FRAGMENTS;zcash-fullnode"
+export BTCPAYGEN_CRYPTO1="btc"
+export BTCPAYGEN_CRYPTO2="zec"
+export BTCPAYGEN_EXCLUDE_FRAGMENTS=""
 . ./btcpay-setup.sh -i
 ```
 
-You can create a local test build of the plugin manually using these steps:
+Then go to your store in BTCPay Server:
 
-### Cloning the Project
+**Store → ZCash → Modify**
 
-```sh
-git clone --recurse-submodules https://github.com/btcpay-zcash/btcpayserver-zcash-plugin
-```
+Enter your:
+- **Wallet Viewing Key** (starts with `uview1...`)
+- **Birth Height** (the ZCash block height when your wallet was created)
+- Enable the wallet and save
 
-### Creating and Running a Local Build
+### Getting Your Viewing Key
 
-> `cd` into the repository
+You can export a UFVK from:
+- **YWallet** (Android/iOS) → Menu → More → Accounts → Export UFVK
+- **Zingo** (Android) → Settings → Export Keys
 
-```sh
-cd btcpayserver
-dotnet build .
-cd ..
-dotnet build .
+---
 
-cd btcpayserver/BTCPayServer
-dotnet run
-```
+## Configuration Reference
 
-### Creating a Production Build Locally
+| Field | Description |
+|---|---|
+| Wallet Viewing Key | Your ZCash unified full viewing key (UFVK) starting with `uview1...` |
+| Birth Height | The ZCash block height when your wallet was created |
+| Enabled | Toggle to activate ZCash payments for this store |
+| Confirmation Speed | How many confirmations before an invoice is marked settled |
 
-```sh
-cd btcpayserver
-dotnet build .
-cd ..
-dotnet publish
-cd bin/Release/net8.0/publish/
-zip BTCPayServer.Plugins.ZCash.btcpay BTCPayServer.Plugins.ZCash.pdb BTCPayServer.Plugins.ZCash.dll BTCPayServer.Plugins.ZCash.deps.json
-```
+---
 
-## Contribution
+## Grant Proposal
 
-You will need to create this file:
+This project is being developed as part of a grant proposal to the ZCash community.
 
-**`btcpayserver/BTCPayServer/appsettings.dev.json`**
+**Goal:** Fix a known limitation in the BTCPay ZCash plugin that prevents proper multistore usage, and deliver a working, documented, and maintainable solution that can be merged upstream.
 
-```json
-{
-  "DEBUG_PLUGINS": "/<absolute-path-to-repo>/btcpayserver-zcash-plugin/Plugins/ZCash/bin/Debug/net8.0/BTCPayServer.Plugins.ZCash.dll",
-  "ZEC_DAEMON_URI": "http://127.0.0.1:8001",
-  "ZEC_WALLET_DAEMON_URI": "http://127.0.0.1:8001",
-  "ZEC_WALLET_DAEMON_WALLETDIR": "/<absolute-path-to-repo>/btcpayserver-zcash-plugin/dev/wallet_datadir",
-  "CHAINS": "zec"
-}
+**Deliverables:**
+- Per-store ZCash wallet configuration (this branch)
+- Documentation for installation and store setup
+- Tested and working on a live BTCPay multistore instance
+- Pull request submitted to the upstream repository
 
-```
+**Why this matters:** BTCPay Server is one of the most widely used self-hosted payment processors. Making ZCash work properly in multistore setups removes a real barrier for merchants who want to accept ZEC privately without running a dedicated server per store.
 
-## Configuration
+---
 
-Configure this plugin using the following environment variables:
+## Status
 
-| Environment variable | Description |
-| --- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-**BTCPAY_ZEC_DAEMON_URI** | **Required**. The URI of the deamon RPC interface |
-**BTCPAY_ZEC_WALLET_DAEMON_URI** | **Required**.  The URI of the wallet RPC interface | http://127.0.0.1:18082 |
-**BTCPAY_ZEC_WALLET_DAEMON_WALLETDIR** | **Required**. The directory of the wallet directory |
+- [x] Fork created from upstream btcpay-zcash plugin
+- [x] Per-store viewing key configuration working
+- [x] Tested on live BTCPay multistore instance
+- [x] ZCash invoices generating with correct shielded addresses
+- [ ] Unit tests
+- [ ] Pull request to upstream
 
-## For Maintainers
+---
 
-If you are a developer maintaining this plugin, in order to maintain this plugin, you need to clone this repository with `--recurse-submodules`:
-
-```sh
-git clone --recurse-submodules https://github.com/btcpay-zcash/btcpayserver-zcash-plugin
-```
-
-# Licence
+## License
 
 [MIT](LICENSE.md)
